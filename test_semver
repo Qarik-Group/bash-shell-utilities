@@ -1,0 +1,167 @@
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+set -eu
+
+PATH="${DIR}:${PATH}"
+
+. shl_semver
+
+SEP=$'\t'
+test_vn_parse() {
+    local _parts
+
+    [[ "$#" -ne 5 ]]  && {
+        echo wrong number of parameters "$#"
+        return
+    }
+    local _input="$1"
+    local _version="$2"
+    local _prerelease="$3"
+    local _build="$4"
+    local _expect="$5"
+    [[ ${_version} == "''" ]] && _version=""
+    [[ ${_prerelease} == "''" ]] && _prerelease=""
+    [[ ${_build} == "''" ]] && _build=""
+    
+    set +e
+    local -a _parts
+    local _result _array
+    _array="$(vn_Parse "${_input}" "_parts")"
+    _result=$?
+    eval "${_array}"
+    # _array=$(vn_Parse "${_input}" "_parts")
+    # _result=$?
+    # eval "${_array}"
+    set -e
+    
+    compare_parts() {
+        [[ ${#_parts[@]} -eq 3 && $# -eq 3 && "${_parts[0]}" == "$1" && "${_parts[1]}" == "$2" && "${_parts[2]}" == "$3" ]]
+    }
+
+    case "${_expect}" in
+        pass)
+            [[ "${_result}" -eq 0 ]] && compare_parts "${_version}" "${_prerelease}" "${_build}" &&
+                echo "Pass: '${_input}'" || echo "Fail: '$1 expect ${_expect}'" 
+            ;;
+        fail)
+            [[ "${_result}" -ne 0 ]] && echo "Pass: Negative '${_input}'" || echo "Fail: '$1 expect ${_expect}'" 
+            ;;
+        *)
+            echo  Invaild expect value for test_vn_parse "${@}"
+            ;;
+    esac
+}
+
+echo -e "\n\nvn_parse tests"
+while IFS=$'\t' read -r _input _version _prerelease _build _expect _remaining
+do
+    [[ -n "${_remaining}" ]] && {
+        echo test data error
+        continue
+    }
+    [[ "${_input}" =~ ^# ]] && continue
+    test_vn_parse "${_input}" "${_version}" "${_prerelease}" "${_build}" "${_expect}" 
+done << EOF
+1.0.0-prerelease+build${SEP}1.0.0${SEP}prerelease${SEP}build${SEP}pass
+1.0.0${SEP}1.0.0${SEP}''${SEP}''${SEP}pass
+1.0.0+build${SEP}${SEP}${SEP}${SEP}1.0.0${SEP}''${SEP}${SEP}${SEP}build${SEP}pass
+1.0.0-prerelease${SEP}${SEP}1.0.0${SEP}prerelease${SEP}''${SEP}${SEP}pass
+9.10.10-a.b.c+....${SEP}${SEP}9.10.10${SEP}a.b.c${SEP}${SEP}....${SEP}pass
+invalid${SEP}''${SEP}''${SEP}''${SEP}fail
+-prelease${SEP}''${SEP}''${SEP}''${SEP}fail
+invalid-prelease${SEP}''${SEP}''${SEP}''${SEP}fail
+0.1.0invalid${SEP}''${SEP}''${SEP}''${SEP}fail
+1.0.0-alpha${SEP}1.0.0${SEP}alpha${SEP}''${SEP}pass
+1.0.0-alpha.1${SEP}1.0.0${SEP}alpha.1${SEP}''${SEP}pass
+1.0.0-0.3.7${SEP}1.0.0${SEP}0.3.7${SEP}''${SEP}pass
+1.0.0-alpha.beta${SEP}1.0.0${SEP}alpha.beta${SEP}''${SEP}pass
+1.0.0-beta${SEP}1.0.0${SEP}beta${SEP}''${SEP}pass
+1.0.0-beta.2${SEP}1.0.0${SEP}beta.2${SEP}''${SEP}pass
+1.0.0-beta.11${SEP}1.0.0${SEP}beta.11${SEP}''${SEP}pass
+1.0.0-rc.1${SEP}1.0.0${SEP}rc.1${SEP}''${SEP}pass
+1.0.0-x.7.z.92${SEP}1.0.0${SEP}x.7.z.92${SEP}''${SEP}pass
+...${SEP}...${SEP}''${SEP}''${SEP}pass
+1.2.3.4.5-6-1+2	1.2.3.4.5	6-1	2	pass
+3.4-a b c+d e f${SEP}3.4${SEP}a b c${SEP}d e f${SEP}pass
+EOF
+
+
+test_vn_Compare () {
+    local op
+    set +e
+    vn_Compare "$1" "$2"
+    case $? in
+        0) op='=';;
+        1) op='>';;
+        2) op='<';;
+      254) op='~';;
+      255) op='!';;
+    esac
+    set -e
+    if [[ "$op" != "$3" ]]
+    then
+        if [[ $# == 3 ]]
+        then
+            echo "FAIL: Expected '$3', Actual '$op', Arg1 '$1', Arg2 '$2'"
+        else
+            echo "Pass: Negative '$1 $op $2'  Requested '$3'"
+        fi
+    else
+        echo "Pass: '$1 $op $2'"
+    fi
+}
+
+# Run tests
+# argument table format:
+# testarg1   testarg2     expected_relationship
+# echo "The following tests should pass"
+
+echo -e "\n\nvn_Compare tests"
+while IFS=$'\t' read -r _semver1 _semver2 _expect _remaining
+do
+    [[ -n "${_remaining}" ]] && {
+        echo test data error
+        continue
+    }
+    [[ "${_semver1}" =~ ^# ]] && continue
+    test_vn_Compare "${_semver1}" "${_semver2}" "${_expect}" 
+done << EOF
+1${SEP}1${SEP}=
+2.1${SEP}2.2${SEP}<
+3.0.4.10${SEP}3.0.4.2${SEP}>
+4.08${SEP}4.08.01${SEP}<
+3.2.1.9.8144${SEP}3.2${SEP}>
+3.2.1.9.8144${SEP}3.2${SEP}>
+3.2${SEP}3.2.1.9.8144${SEP}<
+1.2${SEP}2.1${SEP}<
+2.1${SEP}1.2${SEP}>
+5.6.7${SEP}5.6.7${SEP}=
+1.01.1${SEP}1.1.1${SEP}=
+1.1.1${SEP}1.01.1${SEP}=
+1${SEP}1.0${SEP}=
+1.0${SEP}1${SEP}=
+1.0.2.0${SEP}1.0.2${SEP}=
+1..0${SEP}1.0${SEP}=
+1.0${SEP}1..0${SEP}=
+1.0.1${SEP}1..1${SEP}=
+1${SEP}1${SEP}=${SEP}
+a.b.c${SEP}1.1.1${SEP}~
+1.1.1${SEP}a.b.c${SEP}~
+a${SEP}b${SEP}~
+1.0.0-alpha${SEP}1.0.0-alpha.1${SEP}<
+1.0.0-alpha.1${SEP}1.0.0-alpha.beta${SEP}<
+1.0.0-alpha.beta${SEP}1.0.0-beta${SEP}<
+1.0.0-beta${SEP}1.0.0-beta.2${SEP}<
+1.0.0-beta.2${SEP}1.0.0-beta.11${SEP}<${SEP}
+1.0.0-beta.11${SEP}1.0.0-rc.1${SEP}<
+1.0.0-beta.11${SEP}1.0.0${SEP}<
+1.0.0-beta.9${SEP}1.0.0-beta.12${SEP}<
+1.0.0-beta.12${SEP}1.0.0-beta.12.14${SEP}<
+1.0.0-beta.11.12${SEP}1.0.0${SEP}<
+1.0.0-alpha.1${SEP}1.0.0-alpha${SEP}>
+1.0.0-beta${SEP}1.0.0-alpha.beta${SEP}>
+1.0.0${SEP}1.0.0-beta.11${SEP}>
+1.0.0-beta.12.14${SEP}1.0.0-beta.12${SEP}>
+1.0.0${SEP}1.0.0+build.11${SEP}=
+3.4-a b. c+d \$e f${SEP}3.4-a b. b+d \$e f${SEP}>
+EOF

@@ -1,0 +1,198 @@
+#!/bin/bash
+
+# semanic version number parser
+
+# A normal version number MUST take the form X.Y.Z where X, Y, and Z are
+# non-negative integers, and MUST NOT contain leading zeroes.
+# X is the major version, Y is the minor version, and Z is the patch version.
+#
+# A pre-release version MAY be denoted by appending a hyphen and a series
+# of dot separated identifiers immediately following the patch version.
+#
+# Build metadata MAY be denoted by appending a plus sign and a series of dot
+# separated identifiers immediately following the patch or pre-release version.
+#
+# Extensions to allow other versioning schemes
+# 1. Any number of version number parts are allowed
+# 2. A version number can have leading 0
+# 3. Number comparison is always base 10
+# 4. Prerelease and build parts support more characters that are not shell
+#    interpreted such as spaces
+# 4. A version number part can be empty and it will default to the value of 0.
+#    Ex.  1...4 = 1.0.0.4 and . = 0.0
+# Future extension if determined if it is needed
+# 1. Support more characters in the prerelease and build parts.
+#    This can be done by escapting characters when string is used in the
+#    pattern match or use substring parameter expansion to pull things apart.
+# 2. Support a prefix part before the version number
+#    There are various ways to do this.
+
+
+vn_Parse() {
+    local prevShopt="$(shopt -p extglob)"
+    shopt -s extglob
+    local prereleaseBuild="${1##+([[:digit:].])}"
+    eval "${prevShopt}" || true
+    local version="${1%${prereleaseBuild}}"
+    local prerelease=
+    local build=
+    [[ -n "${version}" && -n "${prereleaseBuild}" ]] && {
+        if [[ ${prereleaseBuild:0:1} == "-" ]]
+        then
+            prereleaseBuild=${prereleaseBuild:1}
+            if [[ "${prereleaseBuild}" =~ .*\+ ]]
+            then
+                build="${prereleaseBuild#*+}"
+                prerelease="${prereleaseBuild%+${build}}"
+            else
+                prerelease="${prereleaseBuild}"
+            fi
+        elif [[ ${prereleaseBuild:0:1} == "+" ]]
+        then
+            build=${prereleaseBuild:1}
+        else
+            version=
+        fi
+    }
+    local -a $2
+    IFS=$'\t' read -a $2 <<< "${version:-\"\"}	${prerelease:-\"\"}	${build:-\"\"}"
+    local _array=$(declare -p $2)
+    _array="${_array//\"\\\"\\\"\"/\"\"}"
+    echo ${_array}
+    [[ -n "${version}" ]] && return 0 || return 1 
+}
+
+
+vn_isNumeric() {
+    [[ -n "${1}" && "${1}" =~ ^[0-9]+$ ]]
+}
+
+# dotString arrayName defaultValue
+vn_dotStringToArray() {
+    local _dotString="${1}"
+    [[ "${_dotString: -1}" == "." ]] && _dotString+="."
+    local -a $2
+    IFS=. read -a $2 <<< "${_dotString}"
+    local array=$(declare -p $2)
+    [[ "${3:+default}" == "default" ]] && {
+        array="${array//\"\"/\"${3}\"}"
+    }
+    echo ${array} 
+}
+
+# A pre-release version MAY be denoted by appending a hyphen and a series
+# of dot separated identifiers immediately following the patch version.
+# 1. Identifiers MUST comprise only ASCII alphanumerics and hyphen [0-9A-Za-z-].
+# 2. Identifiers MUST NOT be empty.
+# 3. Numeric identifiers MUST NOT include leading zeroes.
+# 4. Pre-release versions have a lower precedence than the associated
+#    normal version.
+# A pre-release version indicates that the version is unstable and might
+# not satisfy the intended compatibility requirements as denoted by its
+# associated normal version.
+# Examples: 1.0.0-alpha, 1.0.0-alpha.1, 1.0.0-0.3.7, 1.0.0-x.7.z.92.
+
+# Precedence refers to how versions are compared to each other when ordered.
+# 1. Precedence MUST be calculated by separating the version into
+#    major, minor, patch and pre-release identifiers in that order
+#    (Build metadata does not figure into precedence).
+# 2. Precedence is determined by the first difference when comparing
+#    each of these identifiers from left to right as follows:
+#    A. Major, minor, and patch versions are always compared numerically.
+#       Example: 1.0.0 < 2.0.0 < 2.1.0 < 2.1.1.
+#    3. When major, minor, and patch are equal, a pre-release version
+#       has lower precedence than a normal version.
+#       Example: 1.0.0-alpha < 1.0.0.
+# 4. Precedence for two pre-release versions with the same major, minor,
+#    and patch version MUST be determined by comparing each dot separated
+#    identifier from left to right until a difference is found as follows:
+#    A. Identifiers consisting of only digits are compared numerically
+#    B. Identifiers with letters or hyphens are compared lexically in
+#       ASCII sort order.
+#    C. Numeric identifiers always have lower precedence than non-numeric
+#       identifiers.
+#    D. A larger set of pre-release fields has a higher precedence than a
+#       smaller set, if all of the preceding identifiers are equal.
+#       Example:  1.0.0-alpha < 1.0.0-alpha.1 < 1.0.0-alpha.beta < 1.0.0-beta
+#               < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0.
+
+# 
+vn_comparePrerelease() {
+
+    eval $(vn_dotStringToArray "${1}" "_prerel1")
+    eval $(vn_dotStringToArray "${2}" "_prerel2")
+    [[ -z "${1}" && -z "${2}" ]] && return 0 
+    [[ -z "${1}" && -n "${2}" ]] && return 1 
+    [[ -n "${1}" && -z "${2}" ]] && return 2 
+    local _numCmpParts=${#_prerel1[@]}
+    [[ ${#_prerel1[@]} > ${#_prerel2[@]} ]] && _numCmpParts=${#_prerel2[@]}
+    for (( i=0; i < ${_numCmpParts}; i++ ))
+    do
+        local _part1=${_prerel1[i]}
+        local _part2=${_prerel2[i]}
+
+        if vn_isNumeric "${_part1}" && vn_isNumeric "${_part2}"
+        then
+            (( 10#${_part1} > 10#${_part2} )) && return 1
+            (( 10#${_part1} < 10#${_part2} )) && return 2
+        else
+            [[ ${_part1} > ${_part2} ]] && return 1
+            [[ ${_part1} < ${_part2} ]] && return 2
+        fi
+    done
+    [[ ${#_prerel1[@]} -gt ${_numCmpParts} ]] && return 1 
+    [[ ${#_prerel2[@]} -gt ${_numCmpParts} ]] && return 2 
+
+    return 0
+}
+
+# version number compare - = returns  0; > returns 1; < returns 2
+
+vn_Compare () {
+
+    [[ ${#} -ne 2 ]] && return 255
+    local _semver1 _semver2 _array
+    _array=$(vn_Parse "${1}" "_semver1")  || return 254
+    eval "${_array}"
+    _array=$(vn_Parse "${2}" "_semver2") || return 254
+    eval "${_array}"
+    [[ -z "${_semver1[0]}" || -z "${_semver2[0]}" ]] && return 254
+    local _ver1 _ver2
+    eval $(vn_dotStringToArray "${_semver1[0]}" "_ver1" 0)
+    eval $(vn_dotStringToArray "${_semver2[0]}" "_ver2" 0)
+    
+    [[ "${_semver1[0]}${_semver1[1]}" != "${_semver2[0]}${_semver2[1]}" ]] && {
+
+        local i
+        local _low="" _fill _maxlen
+
+        if ((${#_ver1[@]} > ${#_ver2[@]}))
+        then
+            _maxlen=${#_ver1[@]}
+            _low=${#_ver2[@]}
+            _fill="_ver2"
+        elif ((${#_ver1[@]} < ${#_ver2[@]}))
+        then
+            _maxlen=${#_ver2[@]}
+            _low=${#_ver1[@]}
+            _fill="_ver1"
+        else
+            _maxlen=${#_ver1[@]}
+        fi
+
+        if [[ -n "${_low}" ]]
+        then
+            for ((i=${_low}; i<${_maxlen}; i++))
+            do
+                [[ "${_fill}" == "_ver1" ]] && _ver1[i]=0 || _ver2[i]=0 
+            done
+        fi
+
+        for ((i=0; i<${_maxlen}; i++))
+        do
+            (( 10#${_ver1[i]} > 10#${_ver2[i]} )) && return 1
+            (( 10#${_ver1[i]} < 10#${_ver2[i]} )) && return 2
+        done
+    }
+    vn_comparePrerelease "${_semver1[1]}" "${_semver2[1]}"
+}
