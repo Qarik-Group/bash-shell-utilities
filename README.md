@@ -29,7 +29,7 @@ Example:
     ```
 
 ####vn_Compare
-    The compare function compares the version and if the prelease exists then it gets compared to.
+    The compare function compares the version and if the prerelease exists then it gets compared to.
     inputs: semanic-versioning-string1  semanic-versioning-string2
     returns status codes only
 
