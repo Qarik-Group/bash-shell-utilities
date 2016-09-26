@@ -89,8 +89,12 @@ EOF
 
 test_vn_Compare () {
     local op
+    local sensitivity=""
+    [[ "$3" == "insensitive" ]] && {
+        sensitivity=" $3"
+    }
     set +e
-    vn_Compare "$1" "$2"
+    vn_Compare "$1" "$2" "$3"
     case $? in
         0) op='=';;
         1) op='>';;
@@ -99,16 +103,16 @@ test_vn_Compare () {
       255) op='!';;
     esac
     set -e
-    if [[ "$op" != "$3" ]]
+    if [[ "$op" != "$4" ]]
     then
-        if [[ $# == 3 ]]
+        if [[ $# == 4 ]]
         then
-            echo "FAIL: Expected '$3', Actual '$op', Arg1 '$1', Arg2 '$2'"
+            echo "FAIL: Expected '$4', Actual '${op}${sensitivity}', Arg1 '$1', Arg2 '$2'"
         else
-            echo "Pass: Negative '$1 $op $2'  Requested '$3'"
+            echo "Pass: Negative '$1 ${op}${sensitivity}  $2'  Requested '$4'"
         fi
     else
-        echo "Pass: '$1 $op $2'"
+        echo "Pass: '$1 ${op}${sensitivity} $2'"
     fi
 }
 
@@ -118,51 +122,54 @@ test_vn_Compare () {
 # echo "The following tests should pass"
 
 echo -e "\n\nvn_Compare tests"
-while IFS=$'\t' read -r _semver1 _semver2 _expect _remaining
+while IFS=$'\t' read -r _semver1 _semver2 _sensitivity _expect _remaining
 do
     [[ -n "${_remaining}" ]] && {
         echo test data error
         continue
     }
     [[ "${_semver1}" =~ ^# ]] && continue
-    test_vn_Compare "${_semver1}" "${_semver2}" "${_expect}" 
+    test_vn_Compare "${_semver1}" "${_semver2}" "${_sensitivity}" "${_expect}" 
 done << EOF
-1${SEP}1${SEP}=
-2.1${SEP}2.2${SEP}<
-3.0.4.10${SEP}3.0.4.2${SEP}>
-4.08${SEP}4.08.01${SEP}<
-3.2.1.9.8144${SEP}3.2${SEP}>
-3.2.1.9.8144${SEP}3.2${SEP}>
-3.2${SEP}3.2.1.9.8144${SEP}<
-1.2${SEP}2.1${SEP}<
-2.1${SEP}1.2${SEP}>
-5.6.7${SEP}5.6.7${SEP}=
-1.01.1${SEP}1.1.1${SEP}=
-1.1.1${SEP}1.01.1${SEP}=
-1${SEP}1.0${SEP}=
-1.0${SEP}1${SEP}=
-1.0.2.0${SEP}1.0.2${SEP}=
-1..0${SEP}1.0${SEP}=
-1.0${SEP}1..0${SEP}=
-1.0.1${SEP}1..1${SEP}=
-1${SEP}1${SEP}=${SEP}
-a.b.c${SEP}1.1.1${SEP}~
-1.1.1${SEP}a.b.c${SEP}~
-a${SEP}b${SEP}~
-1.0.0-alpha${SEP}1.0.0-alpha.1${SEP}<
-1.0.0-alpha.1${SEP}1.0.0-alpha.beta${SEP}<
-1.0.0-alpha.beta${SEP}1.0.0-beta${SEP}<
-1.0.0-beta${SEP}1.0.0-beta.2${SEP}<
-1.0.0-beta.2${SEP}1.0.0-beta.11${SEP}<${SEP}
-1.0.0-beta.11${SEP}1.0.0-rc.1${SEP}<
-1.0.0-beta.11${SEP}1.0.0${SEP}<
-1.0.0-beta.9${SEP}1.0.0-beta.12${SEP}<
-1.0.0-beta.12${SEP}1.0.0-beta.12.14${SEP}<
-1.0.0-beta.11.12${SEP}1.0.0${SEP}<
-1.0.0-alpha.1${SEP}1.0.0-alpha${SEP}>
-1.0.0-beta${SEP}1.0.0-alpha.beta${SEP}>
-1.0.0${SEP}1.0.0-beta.11${SEP}>
-1.0.0-beta.12.14${SEP}1.0.0-beta.12${SEP}>
-1.0.0${SEP}1.0.0+build.11${SEP}=
-3.4-a b. c+d \$e f${SEP}3.4-a b. b+d \$e f${SEP}>
+1${SEP}1${SEP}sensitive${SEP}=
+2.1${SEP}2.2${SEP}sensitive${SEP}<
+3.0.4.10${SEP}3.0.4.2${SEP}sensitive${SEP}>
+4.08${SEP}4.08.01${SEP}sensitive${SEP}<
+3.2.1.9.8144${SEP}3.2${SEP}sensitive${SEP}>
+3.2.1.9.8144${SEP}3.2${SEP}sensitive${SEP}>
+3.2${SEP}3.2.1.9.8144${SEP}sensitive${SEP}<
+1.2${SEP}2.1${SEP}sensitive${SEP}<
+2.1${SEP}1.2${SEP}sensitive${SEP}>
+5.6.7${SEP}5.6.7${SEP}sensitive${SEP}=
+1.01.1${SEP}1.1.1${SEP}sensitive${SEP}=
+1.1.1${SEP}1.01.1${SEP}sensitive${SEP}=
+1${SEP}1.0${SEP}sensitive${SEP}=
+1.0${SEP}1${SEP}sensitive${SEP}=
+1.0.2.0${SEP}1.0.2${SEP}sensitive${SEP}=
+1..0${SEP}1.0${SEP}sensitive${SEP}=
+1.0${SEP}1..0${SEP}sensitive${SEP}=
+1.0.1${SEP}1..1${SEP}sensitive${SEP}=
+1${SEP}1${SEP}sensitive${SEP}=
+a.b.c${SEP}1.1.1${SEP}sensitive${SEP}~
+a${SEP}b${SEP}sensitive${SEP}~
+1.1.1${SEP}a.b.c${SEP}sensitive${SEP}~
+1.0.0-alpha${SEP}1.0.0-alpha.1${SEP}sensitive${SEP}<
+1.0.0-alpha.1${SEP}1.0.0-alpha.beta${SEP}sensitive${SEP}<
+1.0.0-alpha.beta${SEP}1.0.0-beta${SEP}sensitive${SEP}<
+1.0.0-beta${SEP}1.0.0-beta.2${SEP}sensitive${SEP}<
+1.0.0-beta.2${SEP}1.0.0-beta.11${SEP}sensitive${SEP}<
+1.0.0-beta.11${SEP}1.0.0-rc.1${SEP}sensitive${SEP}<
+1.0.0-beta.11${SEP}1.0.0${SEP}sensitive${SEP}<
+1.0.0-beta.9${SEP}1.0.0-beta.12${SEP}sensitive${SEP}<
+1.0.0-beta.12${SEP}1.0.0-beta.12.14${SEP}sensitive${SEP}<
+1.0.0-beta.11.12${SEP}1.0.0${SEP}sensitive${SEP}<
+1.0.0-alpha.1${SEP}1.0.0-alpha${SEP}sensitive${SEP}>
+1.0.0-beta${SEP}1.0.0-alpha.beta${SEP}sensitive${SEP}>
+1.0.0${SEP}1.0.0-beta.11${SEP}sensitive${SEP}>
+1.0.0-beta.12.14${SEP}1.0.0-beta.12${SEP}sensitive${SEP}>
+1.0.0${SEP}1.0.0+build.11${SEP}sensitive${SEP}=
+3.4-a b. c+d \$e f${SEP}3.4-a b. b+d \$e f${SEP}sensitive${SEP}>
+1.0.0-beta.2${SEP}1.0.0-Beta.11${SEP}sensitive${SEP}>
+1.0.0-beta.2${SEP}1.0.0-Beta.11${SEP}insensitive${SEP}<
+1.0.0-beta${SEP}1.0.0-Beta${SEP}insensitive${SEP}=
 EOF

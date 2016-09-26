@@ -131,6 +131,12 @@ vn_comparePrerelease() {
         local _part1=${_prerel1[i]}
         local _part2=${_prerel2[i]}
 
+        if [[ "${3:-sensitive}" != sensitive ]]  
+        then
+            _part1=$(tr '[:upper:]' '[:lower:]'<<<"${_part1}")
+            _part2=$(tr '[:upper:]' '[:lower:]'<<<"${_part2}")
+        fi
+
         if vn_isNumeric "${_part1}" && vn_isNumeric "${_part2}"
         then
             (( 10#${_part1} > 10#${_part2} )) && return 1
@@ -150,7 +156,11 @@ vn_comparePrerelease() {
 
 vn_Compare () {
 
-    [[ ${#} -ne 2 ]] && return 255
+    [[ ${#} -lt 2 || ${#} -gt 3 ]] && return 255
+    local caseSensitivity="sensitive"
+    [[ ${3:-noset} != "notset" && ${3:-notset} != "sensitive" ]] && {
+        caseSensitivity="insensitive"
+    }
     local _semver1 _semver2 _array
     _array=$(vn_Parse "${1}" "_semver1")  || return 254
     eval "${_array}"
@@ -194,5 +204,5 @@ vn_Compare () {
             (( 10#${_ver1[i]} < 10#${_ver2[i]} )) && return 2
         done
     }
-    vn_comparePrerelease "${_semver1[1]}" "${_semver2[1]}"
+    vn_comparePrerelease "${_semver1[1]}" "${_semver2[1]}" "${caseSensitivity}"
 }
