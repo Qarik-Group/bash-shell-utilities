@@ -37,13 +37,13 @@ Example:
 ```
 
 #### vn_Compare
-The compare function compares the version and if the prerelease exists then it gets compared to. The prelease field can be with or without case sensitiviity.
+The compare function compares the version and if the prerelease exists then it gets compared to. The prelease field, by default,  will be compared with case sensitivity.
 
 <dl>
 <dt>inputs</dt>
 <dd>semanic-versioning-string1
 semanic-versioning-string2
-[sensitive|insensitive]
+[<u>sensitive</u>|insensitive]
 </dd>
 </dl>
 
